@@ -1,13 +1,408 @@
-import { ArrowUpRight, ChevronRight, Plus, ShieldCheck, Sparkles } from 'lucide-react';
-import { AreaChart, Area, ResponsiveContainer, XAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
-import { useStore } from './store';
-import { monthly, wealth, palette, demoState, today, type Transaction } from './model';
-import { Empty, Panel, Progress, Stat, TransactionsTable, useMoney } from './ui';
-export default function Dashboard({month,add,navigate}:{month:string;add:(t?:Partial<Transaction>)=>void;navigate:(s:string)=>void}){const {s,update}=useStore(),money=useMoney(),w=wealth(s),m=monthly(s,month);const spending=s.categories.map(c=>({name:c.name,value:m.tx.filter(t=>t.type==='expense'&&t.category===c.name).reduce((a,t)=>a+t.amount,0),color:c.color})).filter(c=>c.value>0).sort((a,b)=>b.value-a.value);const chart=s.snapshots.map(p=>({name:new Date(p.date+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}),value:p.value}));const budgets=s.budgets.filter(b=>b.month===month);const health=Math.round((m.income?Math.max(0,Math.min(25,(m.income-m.expenses)/m.income*50)):0)+Math.min(25,w.savings/Math.max(1,m.expenses*6)*25)+(w.assets?Math.max(0,25-w.debt/w.assets*100):0)+(budgets.length?budgets.filter(b=>m.tx.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0)<=b.limit).length/budgets.length*25:0));
-return <><div className="greeting"><div><span className="eyebrow">A LITTLE CLARITY, EVERY DAY</span><h1>Your money, in perspective<span>.</span></h1><p>Welcome back, {s.settings.name}. Let’s make room for what matters.</p></div><div className="greeting-stamp"><ShieldCheck size={16}/> Private by design</div></div>
-{!s.transactions.length&&<div className="welcome-banner"><div><b>Your financial story starts here.</b><p>Add your accounts and first transaction, or explore with clearly labeled sample data.</p></div><button onClick={()=>update(()=>demoState())}>Explore demo ↗</button></div>}
-<div className="hero-grid"><section className="wealth-card"><div className="hero-label">TOTAL NET WORTH <ArrowUpRight size={20}/></div><div className="wealth-value">{money(w.net)}</div><div className="wealth-note"><span className="status-dot"/> Your assets, minus what you owe</div><div className="wealth-bottom"><div><small>Total assets</small><b>{money(w.assets)}</b></div><div><small>Total liabilities</small><b>{money(w.debt)}</b></div><button aria-label="View assets" onClick={()=>navigate('Assets')}><ArrowUpRight size={20}/></button></div><div className="wealth-art"/></section><Panel className="month-card" title="This month, at a glance" subtitle={new Date(month+'-01T12:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'})}><div className="monthly-grid"><Stat label="Income" value={money(m.income)} detail="Money coming in" positive/><Stat label="Expenses" value={money(m.expenses)} detail="Everyday spending"/><Stat label="Saved" value={money(m.saved)} detail={`${m.rate.toFixed(1)}% savings rate`} positive/><Stat label="Unallocated" value={money(m.remaining)} detail="After spending & transfers"/></div></Panel></div>
-<div className="mini-stats"><Stat label="Available cash" value={money(w.cash)} detail="Across everyday accounts"/><Stat label="Total savings" value={money(w.savings)} detail="A little more peace of mind"/><Stat label="Investments" value={money(w.investments)} detail="Your long-term perspective"/><Stat label="Daily spending" value={money(m.expenses/(month===today().slice(0,7)?Number(today().slice(-2)):new Date(Number(month.slice(0,4)),Number(month.slice(5)),0).getDate()))} detail="Average for selected month"/></div>
-<div className="content-grid"><Panel title="Your wealth over time" subtitle="A bigger picture, one day at a time" action={<span className="tag">Recorded history</span>}>{chart.length>1?<div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chart}><defs><linearGradient id="wealth" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#428574" stopOpacity={.22}/><stop offset="1" stopColor="#428574" stopOpacity={0}/></linearGradient></defs><CartesianGrid vertical={false} strokeDasharray="3 6" stroke="var(--border)"/><XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11}/><Tooltip formatter={v=>money(Number(v))}/><Area type="monotone" dataKey="value" stroke="#428574" fill="url(#wealth)" strokeWidth={3}/></AreaChart></ResponsiveContainer></div>:<Empty text="Your wealth timeline grows as you save changes on different days."/>}</Panel><Panel title="Where it went" subtitle="A closer look at your spending" action={<button className="text-btn" onClick={()=>navigate('Analytics')}>Details <ArrowUpRight size={14}/></button>}>{spending.length?<><div className="donut"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={spending} dataKey="value" innerRadius={65} outerRadius={88} paddingAngle={4} stroke="none">{spending.map((c,i)=><Cell key={c.name} fill={c.color||palette[i%palette.length]}/>)}</Pie><Tooltip formatter={v=>money(Number(v))}/></PieChart></ResponsiveContainer><div className="donut-center"><small>Spent this month</small><b>{money(m.expenses,true)}</b></div></div><div className="legend">{spending.slice(0,4).map(c=><div key={c.name}><span><i style={{background:c.color}}/>{c.name}</span><b>{money(c.value)}</b></div>)}</div></>:<Empty text="Your spending breakdown will appear here."/>}</Panel></div>
-<div className="quick-strip"><div><span className="quick-icon"><Plus size={20}/></span><div><b>The little things, logged in seconds.</b><small>Your everyday shortcuts</small></div></div><div className="shortcuts">{s.favorites.slice(0,4).map(f=><button key={f.id} onClick={()=>add({merchant:f.name,category:f.category,account:f.account,amount:f.amount||undefined})}>{f.name}<Plus size={12}/></button>)}<button onClick={()=>add()}>Quick add <kbd>⌘ K</kbd></button></div></div>
-<div className="content-grid"><Panel title="Recent transactions" subtitle="The ins, the outs, and everything between" action={<button className="text-btn" onClick={()=>navigate('Transactions')}>View all <ChevronRight size={14}/></button>}><TransactionsTable s={s} ids={[...s.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map(t=>t.id)}/></Panel><Panel title="A plan for your money" subtitle="Small steps. Steady progress." action={<button className="text-btn" onClick={()=>navigate('Budget')}><ArrowUpRight size={17}/></button>}>{budgets.length?budgets.slice(0,3).map(b=>{const used=m.tx.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);return <div className="budget-row" key={b.id}><div><b>{b.category}</b><small>{Math.round(used/b.limit*100)}%</small></div><Progress value={used/b.limit*100}/><small>{money(used)} <span>of {money(b.limit)}</span></small></div>;}):<Empty text="Give your spending a little direction."><button onClick={()=>navigate('Budget')}>Create a budget ↗</button></Empty>}<div className="health-note"><Sparkles size={20}/><div><b>Financial health · {health}/100</b><small>{health>=75?'Looking steady. Keep building your cushion.':'Build savings, manage debt, and keep budgets on track.'}</small></div></div></Panel></div><p className="page-foot">A calmer relationship with your money. <span>One day at a time.</span></p></>;}
+import {
+  ArrowUpRight,
+  ChevronRight,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  ResponsiveContainer,
+  XAxis,
+  Tooltip,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+import { useStore } from "./store";
+import {
+  monthly,
+  wealth,
+  palette,
+  demoState,
+  today,
+  type Transaction,
+} from "./model";
+import {
+  Empty,
+  Panel,
+  Progress,
+  Stat,
+  TransactionsTable,
+  useMoney,
+} from "./ui";
+export default function Dashboard({
+  month,
+  add,
+  navigate,
+}: {
+  month: string;
+  add: (t?: Partial<Transaction>) => void;
+  navigate: (s: string) => void;
+}) {
+  const { s, update } = useStore(),
+    money = useMoney(),
+    w = wealth(s),
+    m = monthly(s, month);
+  const spending = s.categories
+    .map((c) => ({
+      name: c.name,
+      value: m.tx
+        .filter((t) => t.type === "expense" && t.category === c.name)
+        .reduce((a, t) => a + t.amount, 0),
+      color: c.color,
+    }))
+    .filter((c) => c.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const chart = s.snapshots.map((p) => ({
+    name: new Date(p.date + "T12:00:00").toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+    }),
+    value: p.value,
+  }));
+  const budgets = s.budgets.filter((b) => b.month === month);
+  const health = Math.round(
+    (m.income
+      ? Math.max(0, Math.min(25, ((m.income - m.expenses) / m.income) * 50))
+      : 0) +
+      Math.min(25, (w.savings / Math.max(1, m.expenses * 6)) * 25) +
+      (w.assets ? Math.max(0, 25 - (w.debt / w.assets) * 100) : 0) +
+      (budgets.length
+        ? (budgets.filter(
+            (b) =>
+              m.tx
+                .filter(
+                  (t) => t.type === "expense" && t.category === b.category,
+                )
+                .reduce((a, t) => a + t.amount, 0) <= b.limit,
+          ).length /
+            budgets.length) *
+          25
+        : 0),
+  );
+  return (
+    <>
+      <div className="greeting">
+        <div>
+          <span className="eyebrow">A LITTLE CLARITY, EVERY DAY</span>
+          <h1>
+            Your money, in perspective<span>.</span>
+          </h1>
+          <p>
+            Welcome back, {s.settings.name}. Let’s make room for what matters.
+          </p>
+        </div>
+        <div className="greeting-stamp">
+          <ShieldCheck size={16} /> Private by design
+        </div>
+      </div>
+      {!s.transactions.length && (
+        <div className="welcome-banner">
+          <div>
+            <b>Your financial story starts here.</b>
+            <p>
+              Add your accounts and first transaction, or explore with clearly
+              labeled sample data.
+            </p>
+          </div>
+          <button onClick={() => update(() => demoState())}>
+            Explore demo ↗
+          </button>
+        </div>
+      )}
+      <div className="hero-grid">
+        <section className="wealth-card">
+          <div className="hero-label">
+            TOTAL NET WORTH <ArrowUpRight size={20} />
+          </div>
+          <div className="wealth-value">{money(w.net)}</div>
+          <div className="wealth-note">
+            <span className="status-dot" /> Your assets, minus what you owe
+          </div>
+          <div className="wealth-bottom">
+            <div>
+              <small>Total assets</small>
+              <b>{money(w.assets)}</b>
+            </div>
+            <div>
+              <small>Total liabilities</small>
+              <b>{money(w.debt)}</b>
+            </div>
+            <button aria-label="View assets" onClick={() => navigate("Assets")}>
+              <ArrowUpRight size={20} />
+            </button>
+          </div>
+          <div className="wealth-art" />
+        </section>
+        <Panel
+          className="month-card"
+          title="This month, at a glance"
+          subtitle={new Date(month + "-01T12:00:00").toLocaleDateString(
+            "en-GB",
+            { month: "long", year: "numeric" },
+          )}
+        >
+          <div className="monthly-grid">
+            <Stat
+              label="Income"
+              value={money(m.income)}
+              detail="Money coming in"
+              positive
+            />
+            <Stat
+              label="Expenses"
+              value={money(m.expenses)}
+              detail="Everyday spending"
+            />
+            <Stat
+              label="Saved"
+              value={money(m.saved)}
+              detail={`${m.rate.toFixed(1)}% savings rate`}
+              positive
+            />
+            <Stat
+              label="Unallocated"
+              value={money(m.remaining)}
+              detail="After spending & transfers"
+            />
+          </div>
+        </Panel>
+      </div>
+      <div className="mini-stats">
+        <Stat
+          label="Available cash"
+          value={money(w.cash)}
+          detail="Across everyday accounts"
+        />
+        <Stat
+          label="Total savings"
+          value={money(w.savings)}
+          detail="A little more peace of mind"
+        />
+        <Stat
+          label="Investments"
+          value={money(w.investments)}
+          detail="Your long-term perspective"
+        />
+        <Stat
+          label="Daily spending"
+          value={money(
+            m.expenses /
+              (month === today().slice(0, 7)
+                ? Number(today().slice(-2))
+                : new Date(
+                    Number(month.slice(0, 4)),
+                    Number(month.slice(5)),
+                    0,
+                  ).getDate()),
+          )}
+          detail="Average for selected month"
+        />
+      </div>
+      <div className="content-grid">
+        <Panel
+          title="Your wealth over time"
+          subtitle="A bigger picture, one day at a time"
+          action={<span className="tag">Recorded history</span>}
+        >
+          {chart.length > 1 ? (
+            <div className="chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chart}>
+                  <defs>
+                    <linearGradient id="wealth" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stopColor="#428574" stopOpacity={0.22} />
+                      <stop offset="1" stopColor="#428574" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    vertical={false}
+                    strokeDasharray="3 6"
+                    stroke="var(--border)"
+                  />
+                  <XAxis
+                    dataKey="name"
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={11}
+                  />
+                  <Tooltip formatter={(v) => money(Number(v))} />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#428574"
+                    fill="url(#wealth)"
+                    strokeWidth={3}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <Empty text="Your wealth timeline grows as you save changes on different days." />
+          )}
+        </Panel>
+        <Panel
+          title="Where it went"
+          subtitle="A closer look at your spending"
+          action={
+            <button className="text-btn" onClick={() => navigate("Analytics")}>
+              Details <ArrowUpRight size={14} />
+            </button>
+          }
+        >
+          {spending.length ? (
+            <>
+              <div className="donut">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={spending}
+                      dataKey="value"
+                      innerRadius={65}
+                      outerRadius={88}
+                      paddingAngle={4}
+                      stroke="none"
+                    >
+                      {spending.map((c, i) => (
+                        <Cell
+                          key={c.name}
+                          fill={c.color || palette[i % palette.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v) => money(Number(v))} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="donut-center">
+                  <small>Spent this month</small>
+                  <b>{money(m.expenses, true)}</b>
+                </div>
+              </div>
+              <div className="legend">
+                {spending.slice(0, 4).map((c) => (
+                  <div key={c.name}>
+                    <span>
+                      <i style={{ background: c.color }} />
+                      {c.name}
+                    </span>
+                    <b>{money(c.value)}</b>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <Empty text="Your spending breakdown will appear here." />
+          )}
+        </Panel>
+      </div>
+      <div className="quick-strip">
+        <div>
+          <span className="quick-icon">
+            <Plus size={20} />
+          </span>
+          <div>
+            <b>The little things, logged in seconds.</b>
+            <small>Your everyday shortcuts</small>
+          </div>
+        </div>
+        <div className="shortcuts">
+          {s.favorites.slice(0, 4).map((f) => (
+            <button
+              key={f.id}
+              onClick={() =>
+                add({
+                  merchant: f.name,
+                  category: f.category,
+                  account: f.account,
+                  amount: f.amount || undefined,
+                })
+              }
+            >
+              {f.name}
+              <Plus size={12} />
+            </button>
+          ))}
+          <button onClick={() => add()}>
+            Quick add <kbd>⌘ K</kbd>
+          </button>
+        </div>
+      </div>
+      <div className="content-grid">
+        <Panel
+          title="Recent transactions"
+          subtitle="The ins, the outs, and everything between"
+          action={
+            <button
+              className="text-btn"
+              onClick={() => navigate("Transactions")}
+            >
+              View all <ChevronRight size={14} />
+            </button>
+          }
+        >
+          <TransactionsTable
+            s={s}
+            ids={[...s.transactions]
+              .sort((a, b) => b.date.localeCompare(a.date))
+              .slice(0, 5)
+              .map((t) => t.id)}
+          />
+        </Panel>
+        <Panel
+          title="A plan for your money"
+          subtitle="Small steps. Steady progress."
+          action={
+            <button className="text-btn" onClick={() => navigate("Budget")}>
+              <ArrowUpRight size={17} />
+            </button>
+          }
+        >
+          {budgets.length ? (
+            budgets.slice(0, 3).map((b) => {
+              const used = m.tx
+                .filter(
+                  (t) => t.type === "expense" && t.category === b.category,
+                )
+                .reduce((a, t) => a + t.amount, 0);
+              return (
+                <div className="budget-row" key={b.id}>
+                  <div>
+                    <b>{b.category}</b>
+                    <small>{Math.round((used / b.limit) * 100)}%</small>
+                  </div>
+                  <Progress value={(used / b.limit) * 100} />
+                  <small>
+                    {money(used)} <span>of {money(b.limit)}</span>
+                  </small>
+                </div>
+              );
+            })
+          ) : (
+            <Empty text="Give your spending a little direction.">
+              <button onClick={() => navigate("Budget")}>
+                Create a budget ↗
+              </button>
+            </Empty>
+          )}
+          <div className="health-note">
+            <Sparkles size={20} />
+            <div>
+              <b>Financial health · {health}/100</b>
+              <small>
+                {health >= 75
+                  ? "Looking steady. Keep building your cushion."
+                  : "Build savings, manage debt, and keep budgets on track."}
+              </small>
+            </div>
+          </div>
+        </Panel>
+      </div>
+      <p className="page-foot">
+        A calmer relationship with your money. <span>One day at a time.</span>
+      </p>
+    </>
+  );
+}

@@ -1,7 +1,193 @@
-import { useState } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
-import { useStore } from './store';
-import { monthly, wealth } from './model';
-import { Panel, Stat, download, useMoney } from './ui';
-export default function Analytics({month,reports=false}:{month:string;reports?:boolean}){const {s}=useStore(),money=useMoney(),m=monthly(s,month);const [period,setPeriod]=useState('month');const anchor=new Date(month+'-01T12:00:00');const data=Array.from({length:6},(_,i)=>{const d=new Date(anchor);d.setMonth(d.getMonth()-5+i);const key=d.toLocaleDateString('en-CA').slice(0,7);const m=monthly(s,key);return {name:d.toLocaleDateString('en-GB',{month:'short'}),Income:m.income,Expenses:m.expenses};});const previous=new Date(anchor);previous.setMonth(previous.getMonth()-1);const last=monthly(s,previous.toLocaleDateString('en-CA').slice(0,7));const categories=s.categories.map(c=>({name:c.name,value:m.tx.filter(t=>t.type==='expense'&&t.category===c.name).reduce((v,t)=>v+t.amount,0),last:last.tx.filter(t=>t.type==='expense'&&t.category===c.name).reduce((v,t)=>v+t.amount,0)})).filter(c=>c.value||c.last).sort((a,b)=>b.value-a.value);const merchants=Object.entries(m.tx.filter(t=>t.type==='expense').reduce<Record<string,number>>((a,t)=>({...a,[t.merchant]:(a[t.merchant]||0)+t.amount}),{})).sort((a,b)=>b[1]-a[1]);const year=month.slice(0,4),quarter=Math.floor((Number(month.slice(5))-1)/3);const tx=s.transactions.filter(t=>period==='year'?t.date.startsWith(year):period==='quarter'?t.date.startsWith(year)&&Math.floor((Number(t.date.slice(5,7))-1)/3)===quarter:t.date.startsWith(month));const total=(type:string)=>tx.filter(t=>t.type===type).reduce((a,t)=>a+t.amount,0);
-return <><div className="section-title"><div><span className="eyebrow">THE BIGGER PICTURE</span><h1>{reports?'Your financial review':'Patterns worth noticing'}</h1><p>Clarity from the numbers you’ve recorded.</p></div>{reports&&<button className="secondary" onClick={()=>download(JSON.stringify({period,month,income:total('income'),expenses:total('expense'),transactions:tx},null,2),`ruang-report-${month}.json`)}>Export report</button>}</div>{reports&&<Panel title="Financial review"><select value={period} onChange={e=>setPeriod(e.target.value)}><option value="month">Selected month</option><option value="quarter">Selected quarter</option><option value="year">Selected year</option></select><div className="monthly-grid"><Stat label="Income" value={money(total('income'))}/><Stat label="Spending" value={money(total('expense'))}/><Stat label="Cash flow" value={money(total('income')-total('expense'))}/><Stat label="Current net worth" value={money(wealth(s).net)}/></div></Panel>}<Panel title="Income & expenses" subtitle="Six months of your recorded cash flow"><div className="chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={data}><CartesianGrid vertical={false} stroke="var(--border)"/><XAxis dataKey="name" axisLine={false} tickLine={false}/><YAxis tickFormatter={n=>money(n,true)} width={80} axisLine={false} tickLine={false}/><Tooltip formatter={v=>money(Number(v))}/><Legend/><Bar dataKey="Income" fill="#428574" radius={[5,5,0,0]}/><Bar dataKey="Expenses" fill="#d9bb8d" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></Panel><div className="content-grid"><Panel title="Spending insights" subtitle="Compared with your previous month’s recorded spending">{categories.length?categories.map(c=><div className="insight" key={c.name}><b>{c.name}</b><p>{money(c.value)} this month. {c.last?`${Math.abs((c.value/c.last-1)*100).toFixed(0)}% ${c.value>=c.last?'more':'less'} than last month.`:'No recorded spending last month.'}</p></div>):<p>No spending recorded for this month.</p>}<div className="hint">{categories[0]?`${categories[0].name} is your largest spending category.`:'Add expenses to see patterns.'} {m.income&&m.expenses>m.income?'Spending exceeds recorded income this month. Review your remaining budget.':''}</div></Panel><Panel title="Your top merchants">{merchants.length?merchants.slice(0,10).map(([name,value],i)=><div className="list-row" key={name}><span className="rank">{String(i+1).padStart(2,'0')}</span><b>{name}</b><span>{money(value)}</span></div>):<p>No merchants yet.</p>}</Panel></div></>;}
+import { useState } from "react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Legend,
+} from "recharts";
+import { useStore } from "./store";
+import { monthly, wealth } from "./model";
+import { Panel, Stat, download, useMoney } from "./ui";
+export default function Analytics({
+  month,
+  reports = false,
+}: {
+  month: string;
+  reports?: boolean;
+}) {
+  const { s } = useStore(),
+    money = useMoney(),
+    m = monthly(s, month);
+  const [period, setPeriod] = useState("month");
+  const anchor = new Date(month + "-01T12:00:00");
+  const data = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(anchor);
+    d.setMonth(d.getMonth() - 5 + i);
+    const key = d.toLocaleDateString("en-CA").slice(0, 7);
+    const m = monthly(s, key);
+    return {
+      name: d.toLocaleDateString("en-GB", { month: "short" }),
+      Income: m.income,
+      Expenses: m.expenses,
+    };
+  });
+  const previous = new Date(anchor);
+  previous.setMonth(previous.getMonth() - 1);
+  const last = monthly(s, previous.toLocaleDateString("en-CA").slice(0, 7));
+  const categories = s.categories
+    .map((c) => ({
+      name: c.name,
+      value: m.tx
+        .filter((t) => t.type === "expense" && t.category === c.name)
+        .reduce((v, t) => v + t.amount, 0),
+      last: last.tx
+        .filter((t) => t.type === "expense" && t.category === c.name)
+        .reduce((v, t) => v + t.amount, 0),
+    }))
+    .filter((c) => c.value || c.last)
+    .sort((a, b) => b.value - a.value);
+  const merchants = Object.entries(
+    m.tx
+      .filter((t) => t.type === "expense")
+      .reduce<Record<string, number>>(
+        (a, t) => ({ ...a, [t.merchant]: (a[t.merchant] || 0) + t.amount }),
+        {},
+      ),
+  ).sort((a, b) => b[1] - a[1]);
+  const year = month.slice(0, 4),
+    quarter = Math.floor((Number(month.slice(5)) - 1) / 3);
+  const tx = s.transactions.filter((t) =>
+    period === "year"
+      ? t.date.startsWith(year)
+      : period === "quarter"
+        ? t.date.startsWith(year) &&
+          Math.floor((Number(t.date.slice(5, 7)) - 1) / 3) === quarter
+        : t.date.startsWith(month),
+  );
+  const total = (type: string) =>
+    tx.filter((t) => t.type === type).reduce((a, t) => a + t.amount, 0);
+  return (
+    <>
+      <div className="section-title">
+        <div>
+          <span className="eyebrow">THE BIGGER PICTURE</span>
+          <h1>
+            {reports ? "Your financial review" : "Patterns worth noticing"}
+          </h1>
+          <p>Clarity from the numbers you’ve recorded.</p>
+        </div>
+        {reports && (
+          <button
+            className="secondary"
+            onClick={() =>
+              download(
+                JSON.stringify(
+                  {
+                    period,
+                    month,
+                    income: total("income"),
+                    expenses: total("expense"),
+                    transactions: tx,
+                  },
+                  null,
+                  2,
+                ),
+                `ruang-report-${month}.json`,
+              )
+            }
+          >
+            Export report
+          </button>
+        )}
+      </div>
+      {reports && (
+        <Panel title="Financial review">
+          <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+            <option value="month">Selected month</option>
+            <option value="quarter">Selected quarter</option>
+            <option value="year">Selected year</option>
+          </select>
+          <div className="monthly-grid">
+            <Stat label="Income" value={money(total("income"))} />
+            <Stat label="Spending" value={money(total("expense"))} />
+            <Stat
+              label="Cash flow"
+              value={money(total("income") - total("expense"))}
+            />
+            <Stat label="Current net worth" value={money(wealth(s).net)} />
+          </div>
+        </Panel>
+      )}
+      <Panel
+        title="Income & expenses"
+        subtitle="Six months of your recorded cash flow"
+      >
+        <div className="chart">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid vertical={false} stroke="var(--border)" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} />
+              <YAxis
+                tickFormatter={(n) => money(n, true)}
+                width={80}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip formatter={(v) => money(Number(v))} />
+              <Legend />
+              <Bar dataKey="Income" fill="#428574" radius={[5, 5, 0, 0]} />
+              <Bar dataKey="Expenses" fill="#d9bb8d" radius={[5, 5, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Panel>
+      <div className="content-grid">
+        <Panel
+          title="Spending insights"
+          subtitle="Compared with your previous month’s recorded spending"
+        >
+          {categories.length ? (
+            categories.map((c) => (
+              <div className="insight" key={c.name}>
+                <b>{c.name}</b>
+                <p>
+                  {money(c.value)} this month.{" "}
+                  {c.last
+                    ? `${Math.abs((c.value / c.last - 1) * 100).toFixed(0)}% ${c.value >= c.last ? "more" : "less"} than last month.`
+                    : "No recorded spending last month."}
+                </p>
+              </div>
+            ))
+          ) : (
+            <p>No spending recorded for this month.</p>
+          )}
+          <div className="hint">
+            {categories[0]
+              ? `${categories[0].name} is your largest spending category.`
+              : "Add expenses to see patterns."}{" "}
+            {m.income && m.expenses > m.income
+              ? "Spending exceeds recorded income this month. Review your remaining budget."
+              : ""}
+          </div>
+        </Panel>
+        <Panel title="Your top merchants">
+          {merchants.length ? (
+            merchants.slice(0, 10).map(([name, value], i) => (
+              <div className="list-row" key={name}>
+                <span className="rank">{String(i + 1).padStart(2, "0")}</span>
+                <b>{name}</b>
+                <span>{money(value)}</span>
+              </div>
+            ))
+          ) : (
+            <p>No merchants yet.</p>
+          )}
+        </Panel>
+      </div>
+    </>
+  );
+}

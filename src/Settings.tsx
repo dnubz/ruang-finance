@@ -1,15 +1,467 @@
-import { useRef, useState } from 'react';
-import { Download, Upload, ShieldCheck, Database, LockKeyhole } from 'lucide-react';
-import { useStore } from './store';
-import { backupText, restoreText, pinHash } from './db';
-import { emptyState, demoState, today, uid, type State } from './model';
-import { exportCsv, importCsv } from './csv';
-import { DataForm, Modal, Panel, download, number } from './ui';
-export default function Settings(){const {s,update,notify}=useStore();const file=useRef<HTMLInputElement>(null);const [pending,setPending]=useState<State|null>(null),[clear,setClear]=useState(false),[error,setError]=useState(''),[persist,setPersist]=useState(''),[tab,setTab]=useState('Preferences');async function read(f?:File){if(!f)return;try{if(f.size>25000000)throw Error('Choose a backup smaller than 25 MB.');const text=await f.text();if(f.name.toLowerCase().endsWith('.csv')){const tx=importCsv(text,s);if(await update(v=>({...v,transactions:[...v.transactions,...tx.filter(t=>!v.transactions.some(x=>x.id===t.id))]})))notify(`${tx.length} new transactions imported`);}else setPending(restoreText(text));setError('');}catch(e){setError(e instanceof Error?e.message:'Invalid backup');}if(file.current)file.current.value='';}
-return <><div className="section-title"><div><span className="eyebrow">MAKE YOURSELF AT HOME</span><h1>Your space, your settings</h1><p>Private by default. Yours to keep.</p></div></div><div className="privacy-banner"><ShieldCheck size={25}/><div><b>Your financial data is stored locally on this device.</b><p>Your records are never automatically uploaded. Keep using the same browser profile and app address to access them.</p></div></div><div className="tabs">{['Preferences','Data & backups','Categories & shortcuts','App lock'].map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t}</button>)}</div>
-{tab==='Preferences'&&<Panel title="The everyday details"><DataForm fields={[{name:'name',label:'Your name',value:s.settings.name},{name:'theme',label:'Appearance',type:'select',options:['light','dark'],value:s.settings.theme},{name:'currency',label:'Display currency',type:'select',options:['IDR','USD','SGD','AUD','EUR','JPY'],value:s.settings.currency},{name:'fx',label:'Display units per 1 IDR (1 for IDR)',type:'number',value:s.settings.fx}]} onSave={async d=>{const fx=d.currency==='IDR'?1:number(d,'fx',true);if(await update(v=>({...v,settings:{...v.settings,name:d.name,theme:d.theme as 'light'|'dark',currency:d.currency as State['settings']['currency'],fx}})))notify('Preferences saved');}}/><p className="hint">All records use IDR as their base currency. Conversion uses the display rate you enter; it is not a live exchange-rate feed.</p></Panel>}
-{tab==='Data & backups'&&<><div className="content-grid"><Panel title="A copy, just in case" subtitle="JSON includes all records and preferences. CSV includes transactions."><div className="button-stack"><button onClick={()=>download(backupText(s),`ruang-backup-${today()}.json`)}><Download size={18}/> Export full JSON backup</button><button onClick={()=>download(exportCsv(s.transactions),`ruang-transactions-${today()}.csv`,'text/csv;charset=utf-8')}><Download size={18}/> Export transactions CSV</button><button onClick={()=>file.current?.click()}><Upload size={18}/> Import JSON or CSV</button><input ref={file} type="file" accept=".json,.csv" hidden onChange={e=>read(e.target.files?.[0])}/></div>{error&&<p className="error" role="alert">{error}</p>}<p className="hint">JSON restore replaces the current dataset after confirmation. CSV adds transactions and skips duplicate IDs; referenced accounts must already exist. Backup files contain your financial records in plain text; store them somewhere private.</p></Panel><Panel title="Storage that stays with you" subtitle="IndexedDB · saved after every change"><Database size={35} className="positive"/><p>Closing or refreshing the browser keeps your data. Clearing site data, private browsing, or switching browsers can remove or separate it.</p><button className="secondary" onClick={async()=>{try{setPersist(await navigator.storage?.persist?.()?'Persistent storage granted.':'The browser did not grant persistent storage. Your data still saves normally; keep backups.');}catch{setPersist('Persistent storage is unavailable. Keep regular backups.');}}}>Request persistent storage</button><p>{persist}</p></Panel></div><Panel title="A fresh start"><p>{s.settings.demo?'You are exploring sample data. Clear it before entering your own records.':'Remove your local records and begin again. Export a backup first if you need a copy.'}</p><button className="danger" onClick={()=>setClear(true)}>{s.settings.demo?'Clear Demo Data':'Clear all data'}</button>{!s.transactions.length&&<button className="secondary" onClick={()=>update(()=>demoState())}>Load demo data</button>}</Panel></>}
-{tab==='Categories & shortcuts'&&<div className="content-grid"><Panel title="Custom categories"><DataForm fields={[{name:'name',label:'Category name'},{name:'color',label:'Hex color',value:'#428574'},{name:'subcategories',label:'Subcategories · comma separated',required:false}]} onSave={async d=>{if(s.categories.some(c=>c.name.toLowerCase()===d.name.toLowerCase()))throw Error('This category already exists.');if(!/^#[\da-f]{6}$/i.test(d.color))throw Error('Use a hex color such as #428574.');if(await update(v=>({...v,categories:[...v.categories,{name:d.name,color:d.color,subcategories:d.subcategories}]})))notify('Category saved');}}/><div className="category-tags">{s.categories.map(c=><span className="tag" key={c.name} style={{borderLeft:'3px solid '+c.color}}>{c.name}{c.subcategories&&<small> · {c.subcategories}</small>}</span>)}</div></Panel><Panel title="Favorite transaction shortcuts"><DataForm fields={[{name:'name',label:'Merchant / shortcut name'},{name:'category',label:'Category',type:'select',options:s.categories.map(c=>c.name)},{name:'account',label:'Account',type:'select',options:s.accounts.map(a=>({value:a.id,label:a.name}))},{name:'amount',label:'Default amount · 0 to enter each time',type:'number',value:0}]} onSave={async d=>{if(await update(v=>({...v,favorites:[...v.favorites,{id:uid(),name:d.name,category:d.category,account:d.account,amount:number(d,'amount')}]})))notify('Shortcut saved');}}/>{s.favorites.map(f=><div className="list-row" key={f.id}><b>{f.name}</b><span>{f.category}</span><button onClick={()=>update(v=>({...v,favorites:v.favorites.filter(x=>x.id!==f.id)}))}>Remove</button></div>)}</Panel></div>}
-{tab==='App lock'&&<Panel title="A little extra privacy" subtitle="A screen lock for casual access. This does not encrypt your database or backups."><LockKeyhole size={32}/><DataForm fields={[...(s.settings.pin?[{name:'current',label:'Current PIN',type:'password' as const}]:[]),{name:'pin',label:'New PIN · 4 to 12 digits (blank to remove)',type:'password',required:!s.settings.pin}]} onSave={async d=>{if(s.settings.pin&&await pinHash(d.current,s.settings.salt)!==s.settings.pin)throw Error('Current PIN is incorrect.');if(!d.pin&&s.settings.pin){if(await update(v=>({...v,settings:{...v.settings,pin:'',salt:''}})))notify('PIN removed');return;}if(!/^\d{4,12}$/.test(d.pin))throw Error('Use 4 to 12 digits.');const salt=uid(),pin=await pinHash(d.pin,salt);if(await update(v=>({...v,settings:{...v.settings,pin,salt}})))notify('PIN saved. The app will lock when reopened.');}}/></Panel>}
-{pending&&<Modal title="Restore this backup?" onClose={()=>setPending(null)}><p>This will replace your current data with {pending.transactions.length} transactions, {pending.accounts.length} accounts, and the rest of the backup. Download your current backup first if you need to keep it.</p><div className="form-actions"><button className="secondary" onClick={()=>download(backupText(s),`ruang-before-restore-${today()}.json`)}>Back up current data</button><button className="primary" onClick={async()=>{if(await update(()=>pending)){setPending(null);notify('Backup restored and saved');}}}>Restore backup</button></div></Modal>}
-{clear&&<Modal title={s.settings.demo?'Clear demo data?':'Clear your local data?'} onClose={()=>setClear(false)}><p>This removes all records from this browser. Export a backup to keep a restorable copy.</p><button className="secondary" onClick={()=>download(backupText(s),`ruang-before-clear-${today()}.json`)}>Export backup</button><div className="form-actions"><button onClick={()=>setClear(false)}>Cancel</button><button className="danger" onClick={async()=>{if(await update(()=>emptyState())){setClear(false);notify('Ready for a fresh start');}}}>Clear data</button></div></Modal>}</>;}
+import { useRef, useState } from "react";
+import {
+  Download,
+  Upload,
+  ShieldCheck,
+  Database,
+  LockKeyhole,
+} from "lucide-react";
+import { useStore } from "./store";
+import { backupText, restoreText, pinHash } from "./db";
+import { emptyState, demoState, today, uid, type State } from "./model";
+import { exportCsv, importCsv } from "./csv";
+import { DataForm, Modal, Panel, download, number } from "./ui";
+export default function Settings() {
+  const { s, update, notify } = useStore();
+  const file = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<State | null>(null),
+    [clear, setClear] = useState(false),
+    [error, setError] = useState(""),
+    [persist, setPersist] = useState(""),
+    [tab, setTab] = useState("Preferences");
+  async function read(f?: File) {
+    if (!f) return;
+    try {
+      if (f.size > 25000000) throw Error("Choose a backup smaller than 25 MB.");
+      const text = await f.text();
+      if (f.name.toLowerCase().endsWith(".csv")) {
+        const tx = importCsv(text, s);
+        if (
+          await update((v) => ({
+            ...v,
+            transactions: [
+              ...v.transactions,
+              ...tx.filter((t) => !v.transactions.some((x) => x.id === t.id)),
+            ],
+          }))
+        )
+          notify(`${tx.length} new transactions imported`);
+      } else setPending(restoreText(text));
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid backup");
+    }
+    if (file.current) file.current.value = "";
+  }
+  return (
+    <>
+      <div className="section-title">
+        <div>
+          <span className="eyebrow">MAKE YOURSELF AT HOME</span>
+          <h1>Your space, your settings</h1>
+          <p>Private by default. Yours to keep.</p>
+        </div>
+      </div>
+      <div className="privacy-banner">
+        <ShieldCheck size={25} />
+        <div>
+          <b>Your financial data is stored locally on this device.</b>
+          <p>
+            Your records are never automatically uploaded. Keep using the same
+            browser profile and app address to access them.
+          </p>
+        </div>
+      </div>
+      <div className="tabs">
+        {[
+          "Preferences",
+          "Data & backups",
+          "Categories & shortcuts",
+          "App lock",
+        ].map((t) => (
+          <button
+            key={t}
+            className={tab === t ? "active" : ""}
+            onClick={() => setTab(t)}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      {tab === "Preferences" && (
+        <Panel title="The everyday details">
+          <DataForm
+            fields={[
+              { name: "name", label: "Your name", value: s.settings.name },
+              {
+                name: "theme",
+                label: "Appearance",
+                type: "select",
+                options: ["light", "dark"],
+                value: s.settings.theme,
+              },
+              {
+                name: "currency",
+                label: "Display currency",
+                type: "select",
+                options: ["IDR", "USD", "SGD", "AUD", "EUR", "JPY"],
+                value: s.settings.currency,
+              },
+              {
+                name: "fx",
+                label: "Display units per 1 IDR (1 for IDR)",
+                type: "number",
+                value: s.settings.fx,
+              },
+            ]}
+            onSave={async (d) => {
+              const fx = d.currency === "IDR" ? 1 : number(d, "fx", true);
+              if (
+                await update((v) => ({
+                  ...v,
+                  settings: {
+                    ...v.settings,
+                    name: d.name,
+                    theme: d.theme as "light" | "dark",
+                    currency: d.currency as State["settings"]["currency"],
+                    fx,
+                  },
+                }))
+              )
+                notify("Preferences saved");
+            }}
+          />
+          <p className="hint">
+            All records use IDR as their base currency. Conversion uses the
+            display rate you enter; it is not a live exchange-rate feed.
+          </p>
+        </Panel>
+      )}
+      {tab === "Data & backups" && (
+        <>
+          <div className="content-grid">
+            <Panel
+              title="A copy, just in case"
+              subtitle="JSON includes all records and preferences. CSV includes transactions."
+            >
+              <div className="button-stack">
+                <button
+                  onClick={() =>
+                    download(backupText(s), `ruang-backup-${today()}.json`)
+                  }
+                >
+                  <Download size={18} /> Export full JSON backup
+                </button>
+                <button
+                  onClick={() =>
+                    download(
+                      exportCsv(s.transactions),
+                      `ruang-transactions-${today()}.csv`,
+                      "text/csv;charset=utf-8",
+                    )
+                  }
+                >
+                  <Download size={18} /> Export transactions CSV
+                </button>
+                <button onClick={() => file.current?.click()}>
+                  <Upload size={18} /> Import JSON or CSV
+                </button>
+                <input
+                  ref={file}
+                  type="file"
+                  accept=".json,.csv"
+                  hidden
+                  onChange={(e) => read(e.target.files?.[0])}
+                />
+              </div>
+              {error && (
+                <p className="error" role="alert">
+                  {error}
+                </p>
+              )}
+              <p className="hint">
+                JSON restore replaces the current dataset after confirmation.
+                CSV adds transactions and skips duplicate IDs; referenced
+                accounts must already exist. Backup files contain your financial
+                records in plain text; store them somewhere private.
+              </p>
+            </Panel>
+            <Panel
+              title="Storage that stays with you"
+              subtitle="IndexedDB · saved after every change"
+            >
+              <Database size={35} className="positive" />
+              <p>
+                Closing or refreshing the browser keeps your data. Clearing site
+                data, private browsing, or switching browsers can remove or
+                separate it.
+              </p>
+              <button
+                className="secondary"
+                onClick={async () => {
+                  try {
+                    setPersist(
+                      (await navigator.storage?.persist?.())
+                        ? "Persistent storage granted."
+                        : "The browser did not grant persistent storage. Your data still saves normally; keep backups.",
+                    );
+                  } catch {
+                    setPersist(
+                      "Persistent storage is unavailable. Keep regular backups.",
+                    );
+                  }
+                }}
+              >
+                Request persistent storage
+              </button>
+              <p>{persist}</p>
+            </Panel>
+          </div>
+          <Panel title="A fresh start">
+            <p>
+              {s.settings.demo
+                ? "You are exploring sample data. Clear it before entering your own records."
+                : "Remove your local records and begin again. Export a backup first if you need a copy."}
+            </p>
+            <button className="danger" onClick={() => setClear(true)}>
+              {s.settings.demo ? "Clear Demo Data" : "Clear all data"}
+            </button>
+            {!s.transactions.length && (
+              <button
+                className="secondary"
+                onClick={() => update(() => demoState())}
+              >
+                Load demo data
+              </button>
+            )}
+          </Panel>
+        </>
+      )}
+      {tab === "Categories & shortcuts" && (
+        <div className="content-grid">
+          <Panel title="Custom categories">
+            <DataForm
+              fields={[
+                { name: "name", label: "Category name" },
+                { name: "color", label: "Hex color", value: "#428574" },
+                {
+                  name: "subcategories",
+                  label: "Subcategories · comma separated",
+                  required: false,
+                },
+              ]}
+              onSave={async (d) => {
+                if (
+                  s.categories.some(
+                    (c) => c.name.toLowerCase() === d.name.toLowerCase(),
+                  )
+                )
+                  throw Error("This category already exists.");
+                if (!/^#[\da-f]{6}$/i.test(d.color))
+                  throw Error("Use a hex color such as #428574.");
+                if (
+                  await update((v) => ({
+                    ...v,
+                    categories: [
+                      ...v.categories,
+                      {
+                        name: d.name,
+                        color: d.color,
+                        subcategories: d.subcategories,
+                      },
+                    ],
+                  }))
+                )
+                  notify("Category saved");
+              }}
+            />
+            <div className="category-tags">
+              {s.categories.map((c) => (
+                <span
+                  className="tag"
+                  key={c.name}
+                  style={{ borderLeft: "3px solid " + c.color }}
+                >
+                  {c.name}
+                  {c.subcategories && <small> · {c.subcategories}</small>}
+                </span>
+              ))}
+            </div>
+          </Panel>
+          <Panel title="Favorite transaction shortcuts">
+            <DataForm
+              fields={[
+                { name: "name", label: "Merchant / shortcut name" },
+                {
+                  name: "category",
+                  label: "Category",
+                  type: "select",
+                  options: s.categories.map((c) => c.name),
+                },
+                {
+                  name: "account",
+                  label: "Account",
+                  type: "select",
+                  options: s.accounts.map((a) => ({
+                    value: a.id,
+                    label: a.name,
+                  })),
+                },
+                {
+                  name: "amount",
+                  label: "Default amount · 0 to enter each time",
+                  type: "number",
+                  value: 0,
+                },
+              ]}
+              onSave={async (d) => {
+                if (
+                  await update((v) => ({
+                    ...v,
+                    favorites: [
+                      ...v.favorites,
+                      {
+                        id: uid(),
+                        name: d.name,
+                        category: d.category,
+                        account: d.account,
+                        amount: number(d, "amount"),
+                      },
+                    ],
+                  }))
+                )
+                  notify("Shortcut saved");
+              }}
+            />
+            {s.favorites.map((f) => (
+              <div className="list-row" key={f.id}>
+                <b>{f.name}</b>
+                <span>{f.category}</span>
+                <button
+                  onClick={() =>
+                    update((v) => ({
+                      ...v,
+                      favorites: v.favorites.filter((x) => x.id !== f.id),
+                    }))
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </Panel>
+        </div>
+      )}
+      {tab === "App lock" && (
+        <Panel
+          title="A little extra privacy"
+          subtitle="A screen lock for casual access. This does not encrypt your database or backups."
+        >
+          <LockKeyhole size={32} />
+          <DataForm
+            fields={[
+              ...(s.settings.pin
+                ? [
+                    {
+                      name: "current",
+                      label: "Current PIN",
+                      type: "password" as const,
+                    },
+                  ]
+                : []),
+              {
+                name: "pin",
+                label: "New PIN · 4 to 12 digits (blank to remove)",
+                type: "password",
+                required: !s.settings.pin,
+              },
+            ]}
+            onSave={async (d) => {
+              if (
+                s.settings.pin &&
+                (await pinHash(d.current, s.settings.salt)) !== s.settings.pin
+              )
+                throw Error("Current PIN is incorrect.");
+              if (!d.pin && s.settings.pin) {
+                if (
+                  await update((v) => ({
+                    ...v,
+                    settings: { ...v.settings, pin: "", salt: "" },
+                  }))
+                )
+                  notify("PIN removed");
+                return;
+              }
+              if (!/^\d{4,12}$/.test(d.pin)) throw Error("Use 4 to 12 digits.");
+              const salt = uid(),
+                pin = await pinHash(d.pin, salt);
+              if (
+                await update((v) => ({
+                  ...v,
+                  settings: { ...v.settings, pin, salt },
+                }))
+              )
+                notify("PIN saved. The app will lock when reopened.");
+            }}
+          />
+        </Panel>
+      )}
+      {pending && (
+        <Modal title="Restore this backup?" onClose={() => setPending(null)}>
+          <p>
+            This will replace your current data with{" "}
+            {pending.transactions.length} transactions,{" "}
+            {pending.accounts.length} accounts, and the rest of the backup.
+            Download your current backup first if you need to keep it.
+          </p>
+          <div className="form-actions">
+            <button
+              className="secondary"
+              onClick={() =>
+                download(backupText(s), `ruang-before-restore-${today()}.json`)
+              }
+            >
+              Back up current data
+            </button>
+            <button
+              className="primary"
+              onClick={async () => {
+                if (await update(() => pending)) {
+                  setPending(null);
+                  notify("Backup restored and saved");
+                }
+              }}
+            >
+              Restore backup
+            </button>
+          </div>
+        </Modal>
+      )}
+      {clear && (
+        <Modal
+          title={
+            s.settings.demo ? "Clear demo data?" : "Clear your local data?"
+          }
+          onClose={() => setClear(false)}
+        >
+          <p>
+            This removes all records from this browser. Export a backup to keep
+            a restorable copy.
+          </p>
+          <button
+            className="secondary"
+            onClick={() =>
+              download(backupText(s), `ruang-before-clear-${today()}.json`)
+            }
+          >
+            Export backup
+          </button>
+          <div className="form-actions">
+            <button onClick={() => setClear(false)}>Cancel</button>
+            <button
+              className="danger"
+              onClick={async () => {
+                if (await update(() => emptyState())) {
+                  setClear(false);
+                  notify("Ready for a fresh start");
+                }
+              }}
+            >
+              Clear data
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}

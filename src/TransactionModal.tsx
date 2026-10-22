@@ -1,6 +1,174 @@
-import { useState } from 'react';
-import { DataForm, Modal, number } from './ui';
-import { useStore } from './store';
-import { parseQuick, today, uid, type Transaction } from './model';
-export default function TransactionModal({initial,onClose}:{initial?:Partial<Transaction>;onClose:()=>void}){const {s,update,notify}=useStore();const [kind,setKind]=useState<Transaction['type']>(initial?.type||'expense'),[quick,setQuick]=useState(''),[preset,setPreset]=useState(initial),[err,setErr]=useState('');const accounts=s.accounts.map(a=>({value:a.id,label:a.name}));async function save(d:Record<string,string>){const t:Transaction={id:initial?.id||uid(),type:kind,amount:number(d,'amount',true),merchant:d.merchant,category:d.category,date:d.date,account:d.account,to:kind==='transfer'?d.to:'',notes:d.notes,tags:d.tags,subcategory:d.subcategory};if(kind==='transfer'&&t.account===t.to)throw Error('Choose two different accounts.');if(await update(v=>({...v,transactions:initial?.id?v.transactions.map(x=>x.id===initial.id?t:x):[...v.transactions,t]}))){notify('Transaction saved on this device');onClose();}}async function submitQuick(e:React.FormEvent){e.preventDefault();try{const t={...parseQuick(quick,s),id:uid()};if(await update(v=>({...v,transactions:[...v.transactions,t]}))){notify('Transaction saved on this device');onClose();}}catch(e){setErr((e as Error).message);}}
-return <Modal title={initial?.id?'Edit transaction':'Add a transaction'} onClose={onClose}>{!initial?.id&&<form className="quick-form" onSubmit={submitQuick}><label>THE FAST LANE<input autoFocus value={quick} onChange={e=>setQuick(e.target.value)} placeholder="35k Grab, or income 5m Freelance"/></label><button className="primary">Save ↵</button>{err&&<p className="error">{err}</p>}</form>}<div className="tabs">{(['expense','income','transfer'] as const).map(k=><button key={k} className={kind===k?'active':''} onClick={()=>setKind(k)}>{k}</button>)}</div><DataForm key={kind+JSON.stringify(preset)} fields={[{name:'amount',label:'Amount · IDR',type:'number',value:preset?.amount,placeholder:'e.g. 35k'},{name:'merchant',label:kind==='income'?'Income source':'Merchant / description',value:preset?.merchant},{name:'category',label:'Category',type:'select',options:s.categories.map(c=>c.name),value:preset?.category},{name:'account',label:kind==='transfer'?'From account':'Payment account',type:'select',options:accounts,value:preset?.account},...(kind==='transfer'?[{name:'to',label:'To account',type:'select' as const,options:accounts,value:preset?.to}]:[]),{name:'date',label:'Date',type:'date',value:preset?.date||today()},{name:'subcategory',label:'Subcategory',value:preset?.subcategory,required:false},{name:'notes',label:'Notes',value:preset?.notes,required:false},{name:'tags',label:'Tags',value:preset?.tags,required:false}]} onSave={save} saveLabel="Save transaction"/><div className="hint">{!initial?.id&&s.transactions.length>0&&<button onClick={()=>{const t=s.transactions.at(-1)!;setKind(t.type);setPreset({...t,date:today(),id:undefined});}}>↻ Repeat last transaction</button>}Amounts are entered in rupiah. Transfers move money between accounts without counting as spending.</div></Modal>;}
+import { useState } from "react";
+import { DataForm, Modal, number } from "./ui";
+import { useStore } from "./store";
+import { parseQuick, today, uid, type Transaction } from "./model";
+export default function TransactionModal({
+  initial,
+  onClose,
+}: {
+  initial?: Partial<Transaction>;
+  onClose: () => void;
+}) {
+  const { s, update, notify } = useStore();
+  const [kind, setKind] = useState<Transaction["type"]>(
+      initial?.type || "expense",
+    ),
+    [quick, setQuick] = useState(""),
+    [preset, setPreset] = useState(initial),
+    [err, setErr] = useState("");
+  const accounts = s.accounts.map((a) => ({ value: a.id, label: a.name }));
+  async function save(d: Record<string, string>) {
+    const t: Transaction = {
+      id: initial?.id || uid(),
+      type: kind,
+      amount: number(d, "amount", true),
+      merchant: d.merchant,
+      category: d.category,
+      date: d.date,
+      account: d.account,
+      to: kind === "transfer" ? d.to : "",
+      notes: d.notes,
+      tags: d.tags,
+      subcategory: d.subcategory,
+    };
+    if (kind === "transfer" && t.account === t.to)
+      throw Error("Choose two different accounts.");
+    if (
+      await update((v) => ({
+        ...v,
+        transactions: initial?.id
+          ? v.transactions.map((x) => (x.id === initial.id ? t : x))
+          : [...v.transactions, t],
+      }))
+    ) {
+      notify("Transaction saved on this device");
+      onClose();
+    }
+  }
+  async function submitQuick(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      const t = { ...parseQuick(quick, s), id: uid() };
+      if (
+        await update((v) => ({ ...v, transactions: [...v.transactions, t] }))
+      ) {
+        notify("Transaction saved on this device");
+        onClose();
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+  return (
+    <Modal
+      title={initial?.id ? "Edit transaction" : "Add a transaction"}
+      onClose={onClose}
+    >
+      {!initial?.id && (
+        <form className="quick-form" onSubmit={submitQuick}>
+          <label>
+            THE FAST LANE
+            <input
+              autoFocus
+              value={quick}
+              onChange={(e) => setQuick(e.target.value)}
+              placeholder="35k Grab, or income 5m Freelance"
+            />
+          </label>
+          <button className="primary">Save ↵</button>
+          {err && <p className="error">{err}</p>}
+        </form>
+      )}
+      <div className="tabs">
+        {(["expense", "income", "transfer"] as const).map((k) => (
+          <button
+            key={k}
+            className={kind === k ? "active" : ""}
+            onClick={() => setKind(k)}
+          >
+            {k}
+          </button>
+        ))}
+      </div>
+      <DataForm
+        key={kind + JSON.stringify(preset)}
+        fields={[
+          {
+            name: "amount",
+            label: "Amount · IDR",
+            type: "number",
+            value: preset?.amount,
+            placeholder: "e.g. 35k",
+          },
+          {
+            name: "merchant",
+            label:
+              kind === "income" ? "Income source" : "Merchant / description",
+            value: preset?.merchant,
+          },
+          {
+            name: "category",
+            label: "Category",
+            type: "select",
+            options: s.categories.map((c) => c.name),
+            value: preset?.category,
+          },
+          {
+            name: "account",
+            label: kind === "transfer" ? "From account" : "Payment account",
+            type: "select",
+            options: accounts,
+            value: preset?.account,
+          },
+          ...(kind === "transfer"
+            ? [
+                {
+                  name: "to",
+                  label: "To account",
+                  type: "select" as const,
+                  options: accounts,
+                  value: preset?.to,
+                },
+              ]
+            : []),
+          {
+            name: "date",
+            label: "Date",
+            type: "date",
+            value: preset?.date || today(),
+          },
+          {
+            name: "subcategory",
+            label: "Subcategory",
+            value: preset?.subcategory,
+            required: false,
+          },
+          {
+            name: "notes",
+            label: "Notes",
+            value: preset?.notes,
+            required: false,
+          },
+          { name: "tags", label: "Tags", value: preset?.tags, required: false },
+        ]}
+        onSave={save}
+        saveLabel="Save transaction"
+      />
+      <div className="hint">
+        {!initial?.id && s.transactions.length > 0 && (
+          <button
+            onClick={() => {
+              const t = s.transactions.at(-1)!;
+              setKind(t.type);
+              setPreset({ ...t, date: today(), id: undefined });
+            }}
+          >
+            ↻ Repeat last transaction
+          </button>
+        )}
+        Amounts are entered in rupiah. Transfers move money between accounts
+        without counting as spending.
+      </div>
+    </Modal>
+  );
+}
